@@ -44,3 +44,4 @@ exports.seed = async function (knex) {
     { name: 'Other Income',        type: 'income',  user_id: null },
   ]);
 };
+

@@ -25,3 +25,4 @@ const db = knex(config);
 Model.knex(db);
 
 module.exports = db;
+
