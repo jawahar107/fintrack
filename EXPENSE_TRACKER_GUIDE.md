@@ -368,6 +368,63 @@ cat package.json    # should list all installed packages
 
 ---
 
-<!-- PHASE 1 WILL BE ADDED HERE -->
+---
+
+# Phase 1 — Neon PostgreSQL, Schema, Knex, Migrations & Seeds
+
+## What we built
+- Neon PostgreSQL account + connection string
+- 4-table schema: `users`, `categories`, `transactions`, `budgets`
+- `knexfile.js` — Knex environment config
+- `src/config/db.js` — single Knex instance, bound to Objection
+- 4 migration files — versioned table creation
+- 1 seed file — 19 default categories
+
+## Schema at a glance
+
+```
+users
+  id, name, email (UNIQUE), password_hash, created_at, updated_at
+
+categories
+  id, name, type (income|expense), user_id (NULL = system default), created_at, updated_at
+
+transactions
+  id, user_id (FK), category_id (FK), type, amount (DECIMAL 12,2),
+  description, date (DATE), created_at, updated_at
+
+budgets
+  id, user_id (FK), category_id (FK), month (DATE, always 1st),
+  amount (DECIMAL 12,2), created_at, updated_at
+  UNIQUE(user_id, category_id, month)
+```
+
+## Key design decisions
+- `DECIMAL(12,2)` not FLOAT — exact money math
+- `categories.user_id = NULL` = system default (shared with all users)
+- `transactions.date` ≠ `created_at` — records when transaction happened, not when it was entered
+- `budgets.month` stored as first-of-month DATE — easy range queries
+- Indexes on every FK + commonly filtered columns
+
+## Commands
+```bash
+npm run migrate          # create all 4 tables
+npm run migrate:rollback # undo last batch
+npm run seed             # insert default categories
+```
+
+## Files created
+- `server/knexfile.js`
+- `server/src/config/db.js`
+- `server/src/db/migrations/001_create_users.js`
+- `server/src/db/migrations/002_create_categories.js`
+- `server/src/db/migrations/003_create_transactions.js`
+- `server/src/db/migrations/004_create_budgets.js`
+- `server/src/db/seeds/01_default_categories.js`
+
+---
+
+<!-- PHASE 2 WILL BE ADDED HERE -->
+
 
 
