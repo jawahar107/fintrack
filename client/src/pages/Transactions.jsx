@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -26,16 +27,17 @@ const EMPTY_FORM = {
 };
 
 export default function Transactions() {
+  const [searchParams] = useSearchParams();
   const [transactions, setTransactions] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [categories, setCategories] = useState([]);
   
-  // Filter state
+  // Filter state initialized from URL search params if present
   const [filters, setFilters] = useState({
-    type: '',
-    category_id: '',
-    date_from: '',
-    date_to: '',
+    type: searchParams.get('type') || '',
+    category_id: searchParams.get('category_id') || '',
+    date_from: searchParams.get('date_from') || '',
+    date_to: searchParams.get('date_to') || '',
     min_amount: '',
     max_amount: '',
   });

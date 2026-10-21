@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
@@ -14,7 +14,13 @@ import {
   PlusCircle, 
   ArrowRight,
   PieChart as PieIcon,
-  BarChart3
+  BarChart3,
+  X,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Calendar,
+  Layers,
+  ExternalLink
 } from 'lucide-react';
 import api from '../api/axios';
 
@@ -24,9 +30,23 @@ const PIE_COLORS = [
   '#f97316', '#84cc16'
 ];
 
-function StatCard({ title, amount, icon: Icon, trend, color, bgLight, borderLight }) {
+function StatCard({ title, amount, icon: Icon, trend, color, bgLight, borderLight, onClick }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <div style={{ ...styles.statCard, border: `1px solid ${borderLight}` }} className="animate-fade">
+    <div 
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ 
+        ...styles.statCard, 
+        border: `1.5px solid ${hovered ? color : borderLight}`,
+        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
+        boxShadow: hovered ? '0 12px 20px -5px rgba(0, 0, 0, 0.08)' : '0 4px 6px -1px rgba(0, 0, 0, 0.03)',
+        cursor: 'pointer',
+      }} 
+      className="animate-fade"
+    >
       <div style={styles.statHeader}>
         <span style={styles.statTitle}>{title}</span>
         <div style={{ ...styles.iconWrapper, backgroundColor: bgLight }}>
@@ -34,8 +54,13 @@ function StatCard({ title, amount, icon: Icon, trend, color, bgLight, borderLigh
         </div>
       </div>
       <div style={styles.statAmount}>{amount}</div>
-      <div style={{ ...styles.trendBadge, color }}>
-        {trend}
+      <div style={styles.statFooterRow}>
+        <span style={{ ...styles.trendBadge, color }}>
+          {trend}
+        </span>
+        <span style={{ ...styles.clickHint, color }}>
+          View details ↗
+        </span>
       </div>
     </div>
   );
@@ -45,6 +70,12 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // Active drilldown modal: null | 'income' | 'expense' | 'balance'
+  const [modalType, setModalType] = useState(null);
+  const [modalTransactions, setModalTransactions] = useState([]);
+  const [modalLoading, setModalLoading] = useState(false);
   
   const [currentDate, setCurrentDate] = useState(() => {
     const d = new Date();
@@ -70,6 +101,7 @@ export default function Dashboard() {
     });
   };
 
+  // Load Dashboard Data
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -84,9 +116,70 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, [currentDate.year, currentDate.month]);
 
+  // Load modal breakdown transactions when a card is clicked
+  const openBreakdown = async (type) => {
+    setModalType(type);
+    setModalLoading(true);
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const lastDay = new Date(currentDate.year, currentDate.month, 0).getDate();
+    const date_from = `${currentDate.year}-${pad(currentDate.month)}-01`;
+    const date_to = `${currentDate.year}-${pad(currentDate.month)}-${pad(lastDay)}`;
+
+    try {
+      const params = {
+        date_from,
+        date_to,
+        limit: 50,
+      };
+      if (type === 'income' || type === 'expense') {
+        params.type = type;
+      }
+      const res = await api.get('/transactions', { params });
+      setModalTransactions(res.data.data || []);
+    } catch (err) {
+      console.error('Failed to load breakdown details', err);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
   const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   
   const overspentBudgets = budgets.filter((b) => b.isOverspent);
+
+  const getModalMeta = () => {
+    if (modalType === 'income') {
+      return {
+        title: 'Monthly Income Breakdown',
+        icon: TrendingUp,
+        color: '#10b981',
+        bg: '#ecfdf5',
+        total: fmt(data?.totals?.income),
+        label: 'Total Earned',
+      };
+    }
+    if (modalType === 'expense') {
+      return {
+        title: 'Monthly Expense Breakdown',
+        icon: TrendingDown,
+        color: '#ef4444',
+        bg: '#fef2f2',
+        total: fmt(data?.totals?.expense),
+        label: 'Total Spent',
+      };
+    }
+    return {
+      title: 'Net Cash Flow & Balance',
+      icon: Wallet,
+      color: '#4f46e5',
+      bg: '#eef2ff',
+      total: fmt(data?.totals?.balance),
+      label: 'Net Balance',
+    };
+  };
+
+  const modalMeta = modalType ? getModalMeta() : null;
 
   return (
     <div style={styles.dashboardContainer} className="animate-fade">
@@ -140,7 +233,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* 3 Summary KPI Cards */}
+      {/* 3 Clickable Summary KPI Cards */}
       <div style={styles.statsGrid}>
         <StatCard
           title="Total Income"
@@ -150,6 +243,7 @@ export default function Dashboard() {
           color="#10b981"
           bgLight="#ecfdf5"
           borderLight="#a7f3d0"
+          onClick={() => openBreakdown('income')}
         />
         <StatCard
           title="Total Expenses"
@@ -159,6 +253,7 @@ export default function Dashboard() {
           color="#ef4444"
           bgLight="#fef2f2"
           borderLight="#fecaca"
+          onClick={() => openBreakdown('expense')}
         />
         <StatCard
           title="Net Balance"
@@ -168,6 +263,7 @@ export default function Dashboard() {
           color={data?.totals?.balance >= 0 ? '#4f46e5' : '#ef4444'}
           bgLight={data?.totals?.balance >= 0 ? '#eef2ff' : '#fef2f2'}
           borderLight={data?.totals?.balance >= 0 ? '#c7d2fe' : '#fecaca'}
+          onClick={() => openBreakdown('balance')}
         />
       </div>
 
@@ -285,6 +381,113 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Interactive Card Drill-Down Modal */}
+      {modalType && (
+        <div style={styles.modalBackdrop} className="glass" onClick={() => setModalType(null)}>
+          <div 
+            style={styles.drillModal} 
+            className="animate-fade"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={styles.drillHeader}>
+              <div style={styles.drillTitleGroup}>
+                <div style={{ ...styles.drillIconBox, backgroundColor: modalMeta.bg }}>
+                  <modalMeta.icon size={22} color={modalMeta.color} />
+                </div>
+                <div>
+                  <h3 style={styles.drillHeading}>{modalMeta.title}</h3>
+                  <p style={styles.drillSub}>
+                    {monthNames[currentDate.month - 1]} {currentDate.year} records
+                  </p>
+                </div>
+              </div>
+
+              <button onClick={() => setModalType(null)} style={styles.closeBtn}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Total Banner */}
+            <div style={{ ...styles.totalBanner, borderLeft: `4px solid ${modalMeta.color}` }}>
+              <div>
+                <span style={styles.totalBannerLabel}>{modalMeta.label}</span>
+                <div style={{ ...styles.totalBannerValue, color: modalMeta.color }}>
+                  {modalMeta.total}
+                </div>
+              </div>
+              <div style={styles.recordsCountBadge}>
+                {modalTransactions.length} transaction{modalTransactions.length === 1 ? '' : 's'}
+              </div>
+            </div>
+
+            {/* Transactions List within Modal */}
+            <div style={styles.modalListContainer}>
+              {modalLoading ? (
+                <div style={styles.modalEmptyMsg}>Loading transaction records...</div>
+              ) : modalTransactions.length === 0 ? (
+                <div style={styles.modalEmptyState}>
+                  <Layers size={36} color="#cbd5e1" />
+                  <p>No {modalType} entries recorded in this month yet.</p>
+                </div>
+              ) : (
+                <div style={styles.modalItemsList}>
+                  {modalTransactions.map((t) => {
+                    const isInc = t.type === 'income';
+                    return (
+                      <div key={t.id} style={styles.modalItemRow}>
+                        <div
+                          style={{
+                            ...styles.modalItemIcon,
+                            backgroundColor: isInc ? '#ecfdf5' : '#fef2f2',
+                            color: isInc ? '#059669' : '#dc2626',
+                          }}
+                        >
+                          {isInc ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                        </div>
+
+                        <div style={styles.modalItemDetails}>
+                          <div style={styles.modalItemCategory}>
+                            {t.category?.name || 'Uncategorized'}
+                          </div>
+                          <div style={styles.modalItemDate}>
+                            {t.description ? `${t.description} • ` : ''}
+                            {new Date(t.date).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            ...styles.modalItemAmount,
+                            color: isInc ? '#059669' : '#dc2626',
+                          }}
+                        >
+                          {isInc ? '+' : '-'}{fmt(t.amount)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Link */}
+            <div style={styles.drillFooter}>
+              <button
+                onClick={() => {
+                  setModalType(null);
+                  navigate(`/transactions?type=${modalType === 'balance' ? '' : modalType}`);
+                }}
+                style={styles.viewAllBtn}
+              >
+                <span>View Full Table in Transactions</span>
+                <ExternalLink size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -422,7 +625,8 @@ const styles = {
     backgroundColor: '#ffffff',
     borderRadius: '16px',
     padding: '24px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.03)',
+    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+    position: 'relative',
   },
   statHeader: {
     display: 'flex',
@@ -450,11 +654,21 @@ const styles = {
     fontWeight: '800',
     color: '#0f172a',
     letterSpacing: '-0.5px',
-    marginBottom: '4px',
+    marginBottom: '8px',
+  },
+  statFooterRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   trendBadge: {
     fontSize: '12px',
     fontWeight: '600',
+  },
+  clickHint: {
+    fontSize: '11px',
+    fontWeight: '600',
+    opacity: 0.85,
   },
   chartsGrid: {
     display: 'grid',
@@ -550,5 +764,177 @@ const styles = {
     border: '1px solid #e2e8f0',
     boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
     fontSize: '12px',
+  },
+
+  /* Drill-Down Modal Styles */
+  modalBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+    padding: '20px',
+  },
+  drillModal: {
+    backgroundColor: '#ffffff',
+    borderRadius: '20px',
+    width: '100%',
+    maxWidth: '520px',
+    maxHeight: '85vh',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+    overflow: 'hidden',
+  },
+  drillHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '20px 24px',
+    borderBottom: '1px solid #f1f5f9',
+  },
+  drillTitleGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  drillIconBox: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drillHeading: {
+    fontSize: '17px',
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  drillSub: {
+    fontSize: '12px',
+    color: '#64748b',
+    marginTop: '2px',
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#94a3b8',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '6px',
+  },
+  totalBanner: {
+    margin: '16px 24px',
+    padding: '16px 20px',
+    backgroundColor: '#f8fafc',
+    borderRadius: '12px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  totalBannerLabel: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+  },
+  totalBannerValue: {
+    fontSize: '24px',
+    fontWeight: '800',
+    letterSpacing: '-0.5px',
+    marginTop: '2px',
+  },
+  recordsCountBadge: {
+    fontSize: '12px',
+    fontWeight: '600',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '999px',
+    padding: '4px 12px',
+    color: '#334155',
+  },
+  modalListContainer: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '0 24px',
+  },
+  modalEmptyMsg: {
+    padding: '30px',
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: '13px',
+  },
+  modalEmptyState: {
+    padding: '40px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px',
+    color: '#94a3b8',
+    fontSize: '13px',
+  },
+  modalItemsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  modalItemRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '12px 14px',
+    borderRadius: '10px',
+    border: '1px solid #f1f5f9',
+    backgroundColor: '#ffffff',
+  },
+  modalItemIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  modalItemDetails: {
+    flex: 1,
+  },
+  modalItemCategory: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  modalItemDate: {
+    fontSize: '11px',
+    color: '#94a3b8',
+    marginTop: '2px',
+  },
+  modalItemAmount: {
+    fontSize: '14px',
+    fontWeight: '700',
+  },
+  drillFooter: {
+    padding: '16px 24px',
+    borderTop: '1px solid #f1f5f9',
+    backgroundColor: '#f8fafc',
+  },
+  viewAllBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '10px',
+    backgroundColor: '#ffffff',
+    color: '#4f46e5',
+    border: '1.5px solid #c7d2fe',
+    borderRadius: '10px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
   },
 };
