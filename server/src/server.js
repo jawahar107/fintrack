@@ -23,6 +23,10 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
 });
 
+server.on('error', (err) => {
+  console.error('Server listen error:', err);
+});
+
 // Graceful shutdown — when Render or your terminal sends SIGTERM (kill signal),
 // we finish handling in-flight requests before shutting down.
 // Without this, active requests get cut off mid-flight.
