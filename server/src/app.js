@@ -86,13 +86,11 @@ app.get('/health', (req, res) => {
 // Apply the stricter limiter specifically to auth routes
 app.use('/api/auth', authLimiter);
 
-// ── Phase 3: Auth routes (register, login, /me) ──
-app.use('/api/auth', require('./routes/auth'));
-
-// ── Phase 4: These will be uncommented as we build them ──
-// app.use('/api/categories',   require('./routes/categories'));
-// app.use('/api/transactions', require('./routes/transactions'));
-// app.use('/api/budgets',      require('./routes/budgets'));
+// All API routes
+app.use('/api/auth',         require('./routes/auth'));
+app.use('/api/categories',   require('./routes/categories'));
+app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/budgets',      require('./routes/budgets'));
 
 // ─── 404 Handler ──────────────────────────────────────────────────────────────
 

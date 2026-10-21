@@ -108,3 +108,4 @@ function signToken(userId) {
 }
 
 module.exports = { register, login };
+

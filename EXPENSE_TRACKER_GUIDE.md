@@ -484,7 +484,135 @@ curl http://localhost:5000/api/unknown-endpoint
 
 ---
 
-<!-- PHASE 3 WILL BE ADDED HERE -->
+# Phase 3 — Authentication (User Model, JWT, Bcrypt, Middleware)
+
+## What we built
+- `server/src/models/User.js`: Objection.js model mapping the `users` table with `$formatJson` auto-stripping `password_hash` from all API responses.
+- `server/src/services/authService.js`: Registration with email uniqueness check, password hashing using `bcryptjs` (salt rounds = 12), login comparison, and JWT generation signed with `JWT_SECRET`.
+- `server/src/controllers/authController.js`: HTTP request handlers validating input presence and delegating to authService.
+- `server/src/middleware/auth.js`: Token bouncer verifying `Authorization: Bearer <token>`, validating expiry, and injecting authenticated user credentials into `req.user`.
+- `server/src/routes/auth.js`: Public routes (`/register`, `/login`) and protected profile route (`/me`).
+
+---
+
+# Phase 4 — Categories & Transactions API (CRUD, Filters, Pagination)
+
+## What we built
+- `server/src/models/Category.js` & `server/src/models/Transaction.js`: Objection.js models defining relational mappings (`BelongsToOneRelation`, `HasManyRelation`).
+- `server/src/services/categoryService.js`: Shared + Personal data scoping where users can see system defaults (`user_id IS NULL`) plus their custom categories (`user_id = req.user.id`), but can only update/delete their own.
+- `server/src/services/transactionService.js`: Dynamic query builder supporting filters by `type`, `category_id`, date range (`date_from` / `date_to`), and amount range with parallel count & page queries.
+- `server/src/routes/categories.js` & `server/src/routes/transactions.js`: REST endpoints protected with JWT middleware.
+
+---
+
+# Phase 5 — Budgets API & Dashboard Endpoints
+
+## What we built
+- `server/src/models/Budget.js`: Model for monthly category limits.
+- `server/src/services/budgetService.js`:
+  - `listWithSpending`: Evaluates actual expenses against budget limits for the current month and calculates `spent`, `remaining`, and `isOverspent` flag.
+  - `upsert`: Idempotent budget setup (inserts new or updates existing budget for user + category + month).
+  - `getDashboard`: Executes parallel aggregation queries for:
+    1. Monthly Income, Expense, and Net Balance.
+    2. Category-wise expense breakdown for pie chart.
+    3. 6-Month cash flow trend for bar chart.
+- `server/src/routes/budgets.js`: Endpoints for budget CRUD and `/dashboard` metrics.
+
+---
+
+# Phases 6 to 9 — Modern React Frontend (Vite, Context API, Lucide Icons, Recharts)
+
+## What we built
+- **Vite React Architecture**: Fast HMR setup with React Router DOM v6.
+- **Axios Central Instance (`src/api/axios.js`)**: Auto-injects JWT tokens via request interceptors and handles 401 token expirations cleanly via response interceptors.
+- **Global AuthContext (`src/context/AuthContext.jsx`)**: Synchronizes authentication state across the app with `localStorage` persistence.
+- **Protected Routing (`src/components/ProtectedRoute.jsx`)**: Guard ensuring unauthenticated users are seamlessly redirected to `/login`.
+- **Modern UI Suite**:
+  - `src/components/Navbar.jsx`: Sticky glassmorphic navbar with active link badges, user email/name, and sign-out button.
+  - `src/pages/Login.jsx` & `src/pages/Register.jsx`: Clean cards with gradient badges, inline validation, and loading indicators.
+  - `src/pages/Dashboard.jsx`: Month/year navigator, 3 KPI cards (Total Income, Total Expense, Net Balance), budget overspend warning banner, Recharts Donut Pie chart with category badges, and 6-month cash flow bar chart.
+  - `src/pages/Transactions.jsx`: Type filter pills (All/Expense/Income), category dropdown, date range picker, formatted currency rows, modal form for Add/Edit, and pagination controls.
+  - `src/pages/Budgets.jsx`: Visual budget cards with color-coded progress meters (green/amber/red), overspend deficit pills, and set budget limit form.
+
+---
+
+# Phase 10 — Security & Defensive Engineering
+
+1. **Helmet**: Secures HTTP response headers against clickjacking, cross-site scripting (XSS), and MIME sniffing.
+2. **CORS Configuration**: Restricts API calls to approved origins (`http://localhost:5173` or production client URL).
+3. **Dual Rate Limiting**:
+   - General API limit: 100 requests per 15 minutes per IP.
+   - Auth limit: 10 requests per 15 minutes per IP to block brute-force password guessing.
+4. **Data Isolation**: All database queries explicitly scope to `user_id = req.user.id`. A user can never view, mutate, or delete another user's financial data.
+5. **Precision Math**: All monetary amounts are stored as `DECIMAL(12,2)` in PostgreSQL to prevent floating-point rounding errors.
+
+---
+
+# Phase 11 — Production Deployment Guide
+
+## 1. Neon PostgreSQL
+Your database is already provisioned on Neon with all 4 migrations and seed categories applied!
+
+## 2. Render (Backend Deployment)
+1. Push this repository to GitHub.
+2. Sign in to [Render.com](https://render.com) and click **New + > Web Service**.
+3. Select your GitHub repository.
+4. Set configurations:
+   - **Root Directory**: `server`
+   - **Build Command**: `npm install`
+   - **Start Command**: `node src/server.js`
+5. Under **Environment Variables**, add:
+   - `NODE_ENV`: `production`
+   - `PORT`: `10000`
+   - `DATABASE_URL`: *(Your Neon Connection String)*
+   - `JWT_SECRET`: *(Your 64-char random secret)*
+   - `CLIENT_URL`: `https://your-app.vercel.app` (Your Vercel URL once deployed)
+6. Click **Deploy Web Service**.
+
+## 3. Vercel (Frontend Deployment)
+1. Sign in to [Vercel.com](https://vercel.com) and click **Add New > Project**.
+2. Select your repository.
+3. Set configurations:
+   - **Root Directory**: `client`
+   - **Framework Preset**: `Vite`
+4. Under **Environment Variables**, add:
+   - `VITE_API_URL`: `https://your-render-service.onrender.com/api`
+5. Click **Deploy**.
+6. The included `client/vercel.json` ensures all React Router paths (e.g. `/dashboard`, `/transactions`) correctly route to `index.html`.
+
+---
+
+# Phase 12 — API Reference & Senior Interview Mastery
+
+## REST API Cheat Sheet
+| Method | Endpoint | Auth | Description |
+|:---|:---|:---|:---|
+| `POST` | `/api/auth/register` | No | Creates user, hashes password, returns JWT |
+| `POST` | `/api/auth/login` | No | Validates credentials, returns fresh JWT |
+| `GET` | `/api/auth/me` | Yes | Returns current authenticated user profile |
+| `GET` | `/api/categories` | Yes | System default categories + user custom categories |
+| `POST` | `/api/categories` | Yes | Creates custom category for logged-in user |
+| `GET` | `/api/transactions` | Yes | Paginated transactions with optional filters (`type`, `category_id`, `date_from`, `date_to`) |
+| `POST` | `/api/transactions` | Yes | Records income or expense transaction |
+| `PUT` | `/api/transactions/:id`| Yes | Updates user's existing transaction |
+| `DELETE` | `/api/transactions/:id`| Yes | Removes user's transaction |
+| `GET` | `/api/budgets` | Yes | Monthly category budgets with actual spending & overspend status |
+| `POST` | `/api/budgets` | Yes | Upserts budget for specific category & month |
+| `GET` | `/api/budgets/dashboard`| Yes | Aggregated totals, pie breakdown, and 6-month trend |
+
+## Senior Full-Stack Interview Questions (With Strong Answers)
+
+### Q1: Why did you choose JWT over server-side session cookies?
+**Answer**:
+"JWTs provide a stateless authentication mechanism ideal for decoupled architectures where the frontend (React on Vercel) and backend (Express on Render) reside on separate domains. Storing state on the server requires session stores like Redis and sticky sessions across multiple load-balanced instances. With JWT, the signature verifies authenticity cryptographically without database queries on every authorization check."
+
+### Q2: How did you prevent floating-point rounding errors with currency?
+**Answer**:
+"In JavaScript and standard database floating-point types (`FLOAT` / `DOUBLE`), binary representation leads to precision issues (like `0.1 + 0.2 === 0.30000000000000004`). In PostgreSQL, we designed the financial columns with `DECIMAL(12, 2)`, which stores exact numbers as base-10 strings under the hood. On the frontend and in calculations, amounts are formatted using `Intl.NumberFormat` with fixed decimal fractions."
+
+### Q3: What is the N+1 query problem, and how did Objection.js help solve it?
+**Answer**:
+"The N+1 problem occurs when fetching a list of parent records (e.g., 20 transactions) and then making 20 individual queries to fetch each transaction's category. Objection.js provides `.withGraphFetched('[category]')`, which executes just two queries behind the scenes: one to fetch the page of transactions, and a second `WHERE id IN (...)` query to fetch all matching categories at once, stitching them in memory."
 
 
 

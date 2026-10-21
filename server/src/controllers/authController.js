@@ -84,3 +84,4 @@ async function getMe(req, res, next) {
 }
 
 module.exports = { register, login, getMe };
+
