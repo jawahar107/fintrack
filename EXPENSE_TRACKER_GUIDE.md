@@ -424,7 +424,67 @@ npm run seed             # insert default categories
 
 ---
 
-<!-- PHASE 2 WILL BE ADDED HERE -->
+# Phase 2 — Express Server Setup, Config, and Error Handling
+
+## What we built
+- `server/src/server.js`: Entry point separating `app.listen()` from express configuration, with database bootstrap and graceful shutdown handling (`SIGTERM`).
+- `server/src/app.js`: Express app instance configured with essential security, parsing, rate limiting, and 404 handler.
+- `server/src/middleware/errorHandler.js`: Production-ready centralized error-handling middleware that understands Objection.js validation errors, PostgreSQL unique / foreign-key constraint violations, JWT errors, and general HTTP exceptions.
+
+## Architecture & Middleware Pipeline
+```
+Incoming Request
+      │
+      ▼
+  helmet()             ← Secure HTTP response headers (XSS, Sniffing, Clickjacking)
+      │
+      ▼
+  cors()               ← Restricts access to authorized origin (e.g. http://localhost:5173)
+      │
+      ▼
+  rateLimit()          ← Prevents brute force & DoS attacks (100 req/15min general, 10 req/15min auth)
+      │
+      ▼
+  express.json()       ← Parses incoming JSON bodies (with payload size cap)
+      │
+      ▼
+  /health              ← Liveness probe endpoint for hosting monitors (Render)
+      │
+      ▼
+  /api/*               ← Feature routes (Auth, Categories, Transactions, Budgets)
+      │
+      ▼
+  404 Handler          ← Catches unmatched requests and returns JSON 404
+      │
+      ▼
+  errorHandler         ← Express error-handling middleware (4 arguments: err, req, res, next)
+```
+
+## Key Decisions Explained
+1. **Separation of `app.js` and `server.js`**:
+   - `app.js` configures routes and middleware without binding to a network port.
+   - Enables automated testing with supertest without port conflicts.
+2. **`errorHandler` has 4 parameters `(err, req, res, next)`**:
+   - Express checks the function's arity (`fn.length === 4`). If you write `(err, req, res)`, Express will treat it as regular middleware and fail to intercept errors!
+3. **Database-specific error handling**:
+   - PostgreSQL error codes `23505` (unique violation) and `23503` (foreign key violation) are translated to user-friendly HTTP statuses `409 Conflict` and `400 Bad Request` instead of crashing with `500 Internal Server Error`.
+
+## Testing Phase 2
+```bash
+# Start server in dev mode with auto-reload
+cd server
+npm run dev
+
+# Test health check in another terminal
+curl http://localhost:5000/health
+
+# Test 404 handler
+curl http://localhost:5000/api/unknown-endpoint
+```
+
+---
+
+<!-- PHASE 3 WILL BE ADDED HERE -->
 
 
 
